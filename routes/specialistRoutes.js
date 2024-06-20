@@ -1,17 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
+const { getSpecialties, createSpecialist, getSpecialistsBySpecialty } = require('../controllers/specialistController');
 const authenticateToken = require('../middleware/authMiddleware');
 
-// Ruta para obtener todos los especialistas
-router.get('/', authenticateToken, async (req, res) => {
-  try {
-    const [rows] = await db.execute('SELECT id, name FROM users WHERE role = ?', ['specialist']);
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching specialists:', error);
-    res.status(500).send('Error fetching specialists');
-  }
-});
+// Ruta para obtener todas las especialidades
+router.get('/specialties', authenticateToken, getSpecialties);
+
+// Ruta para crear un nuevo especialista
+router.post('/', authenticateToken, createSpecialist);
+
+// Ruta para obtener especialistas por especialidad
+router.get('/:specialty', authenticateToken, getSpecialistsBySpecialty);
 
 module.exports = router;

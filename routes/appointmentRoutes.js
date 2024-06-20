@@ -1,39 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/db');
 const authenticateToken = require('../middleware/authMiddleware');
+const {
+  createAppointment,
+  getAppointmentsByUser,
+  getAppointmentsBySpecialist,
+  getSpecialties
+} = require('../controllers/appointmentController');
 
 // Ruta para reservar una cita
-router.post('/', authenticateToken, async (req, res) => {
-  const { userId, specialistId, date } = req.body;
+router.post('/', authenticateToken, createAppointment);
 
-  try {
-    await db.execute(
-      'INSERT INTO appointments (user_id, specialist_id, date, attended) VALUES (?, ?, ?, ?)',
-      [userId, specialistId, date, false]
-    );
-    res.status(201).send('Appointment booked successfully');
-  } catch (error) {
-    console.error('Error booking appointment:', error);
-    res.status(500).send('Error booking appointment');
-  }
-});
+// Ruta para obtener las citas de un usuario
+router.get('/:userId', authenticateToken, getAppointmentsByUser);
 
 // Ruta para obtener las citas de un especialista
-router.get('/:specialistId/appointments', authenticateToken, async (req, res) => {
-  const specialistId = req.params.specialistId;
+router.get('/:specialistId/appointments', authenticateToken, getAppointmentsBySpecialist);
 
-  try {
-    const [rows] = await db.execute(
-      'SELECT * FROM appointments WHERE specialist_id = ?',
-      [specialistId]
-    );
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching appointments:', error);
-    res.status(500).send('Error fetching appointments');
-  }
-});
+// Ruta para obtener las especialidades disponibles
+router.get('/specialties', authenticateToken, getSpecialties);
 
 // Ruta para marcar una cita como atendida y añadir un resumen
 router.patch('/:appointmentId/attend', authenticateToken, async (req, res) => {
@@ -69,5 +54,3 @@ router.get('/:userId/recommendations', authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-
-

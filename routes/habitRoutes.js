@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../config/db');
 const authenticateToken = require('../middleware/authMiddleware');
 
+// Ruta para crear un hábito
 router.post('/', authenticateToken, async (req, res) => {
   const { userId, sleepDuration, mealTimes, bathroomFrequency, mood } = req.body;
   const currentDate = new Date().toISOString().split('T')[0]; // Obtener la fecha actual en formato YYYY-MM-DD
@@ -19,6 +20,17 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
+// Ruta para obtener los hábitos de un usuario específico
+router.get('/user/:userId', authenticateToken, async (req, res) => {
+  const userId = req.params.userId;
+
+  try {
+    const [rows] = await db.execute('SELECT * FROM daily_habits WHERE user_id = ?', [userId]);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching habits:', error);
+    res.status(500).send('Error fetching habits');
+  }
+});
+
 module.exports = router;
-
-
