@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const authenticateToken = require('../middleware/authMiddleware');
+const habitController = require('../controllers/habitController');
 
 // Ruta para crear un hábito
 router.post('/', authenticateToken, async (req, res) => {
@@ -32,5 +33,8 @@ router.get('/user/:userId', authenticateToken, async (req, res) => {
     res.status(500).send('Error fetching habits');
   }
 });
+
+// Nueva ruta para obtener recomendaciones de especialistas
+router.get('/recommendations/:userId', authenticateToken, habitController.getSpecialistRecommendations);
 
 module.exports = router;
