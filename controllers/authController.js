@@ -3,29 +3,36 @@ const bcrypt = require('bcrypt');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
+// Configurar nodemailer
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: 'gmnooficial16@gmail.com',
+    pass: 'txpy wfep jifq byoa'
+  }
+});
+
+// Registrar un nuevo usuario
 exports.register = async (req, res) => {
   const { name, email, password, role, captchaToken } = req.body;
 
-  // Validar que todos los campos estén presentes
   if (!name || !email || !password || !captchaToken) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
-  // Validar formato de correo electrónico (debe ser @gmail.com)
   const emailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
   if (!emailRegex.test(email)) {
     return res.status(400).json({ message: 'Email must be a valid Gmail address' });
   }
 
-  // Validar formato de contraseña
   const passwordRegex = /^(?=.*[A-Z]).{8,}$/;
   if (!passwordRegex.test(password)) {
     return res.status(400).json({ message: 'Password must be at least 8 characters long and contain at least one uppercase letter.' });
   }
 
   try {
-    // Verificar el token de reCAPTCHA
     const secretKey = '6LdrZ_spAAAAAJqeYWq6fpVNwEevwOMGxcvbubto';
     const response = await axios.post(`https://www.google.com/recaptcha/api/siteverify`, null, {
       params: {
@@ -38,37 +45,24 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'Captcha verification failed' });
     }
 
-    // Verificar si el correo electrónico ya está registrado
     const [existingUserByEmail] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
     if (existingUserByEmail.length > 0) {
       return res.status(400).json({ message: 'Email already registered' });
     }
 
-    // Verificar si el nombre de usuario ya está registrado
     const [existingUserByName] = await db.execute('SELECT * FROM users WHERE name = ?', [name]);
     if (existingUserByName.length > 0) {
       return res.status(400).json({ message: 'Username already registered' });
     }
 
-    // Encriptar la contraseña y registrar el usuario
     const hashedPassword = await bcrypt.hash(password, 10);
-    const verificationCode = Math.floor(100000 + Math.random() * 900000); // Generar código de verificación de 6 dígitos
+    const verificationCode = Math.floor(100000 + Math.random() * 900000);
 
     await db.execute(
       'INSERT INTO users (name, email, password, role, isActive, verificationCode) VALUES (?, ?, ?, ?, ?, ?)',
       [name, email, hashedPassword, role, false, verificationCode]
     );
 
-    // Configurar el transporte de nodemailer
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: 'gmnooficial16@gmail.com',
-        pass: 'txpy wfep jifq byoa '
-      }
-    });
-
-    // Configurar el correo electrónico
     const mailOptions = {
       from: 'gmnooficial16@gmail.com',
       to: email,
@@ -76,7 +70,6 @@ exports.register = async (req, res) => {
       text: `Your verification code is ${verificationCode}`
     };
 
-    // Enviar el correo electrónico
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
         console.error('Error sending email:', error);
@@ -92,6 +85,7 @@ exports.register = async (req, res) => {
   }
 };
 
+// Verificar cuenta
 exports.verifyAccount = async (req, res) => {
   const { verificationCode } = req.body;
 
@@ -112,6 +106,7 @@ exports.verifyAccount = async (req, res) => {
   }
 };
 
+// Iniciar sesión
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -137,6 +132,63 @@ exports.login = async (req, res) => {
     res.json({ token, role: user.role, userId: user.id });
   } catch (error) {
     console.error('Error during login:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Solicitar recuperación de contraseña
+exports.forgotPassword = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const [user] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (!user.length) {
+      return res.status(404).json({ message: 'Email not found' });
+    }
+
+    const token = crypto.randomBytes(20).toString('hex');
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 1); // El token expira en 1 hora
+
+    await db.execute('UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE email = ?', [token, expires, email]);
+
+    const mailOptions = {
+      from: 'gmnooficial16@gmail.com',
+      to: email,
+      subject: 'Password Reset',
+      text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n` +
+        `Please click on the following link, or paste this into your browser to complete the process:\n\n` +
+        `http://localhost:3000/reset/${token}\n\n` +
+        `If you did not request this, please ignore this email and your password will remain unchanged.\n`
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+      if (error) {
+        console.error('Error sending email:', error);
+        return res.status(500).json({ message: 'Error sending email' });
+      }
+      res.status(200).json({ message: 'Recovery email sent' });
+    });
+  } catch (error) {
+    console.error('Error in forgotPassword:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+// Restablecer contraseña
+exports.resetPassword = async (req, res) => {
+  const { token, newPassword } = req.body;
+  try {
+    const [user] = await db.execute('SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > NOW()', [token]);
+    if (!user.length) {
+      return res.status(400).json({ message: 'Password reset token is invalid or has expired' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await db.execute('UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE id = ?', [hashedPassword, user[0].id]);
+
+    res.status(200).json({ message: 'Password has been reset' });
+  } catch (error) {
+    console.error('Error in resetPassword:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 };
