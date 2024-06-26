@@ -11,7 +11,7 @@ router.get('/profile/:userId', authenticateToken, async (req, res) => {
       'SELECT name, email, role FROM users WHERE id = ?',
       [userId]
     );
-    
+
     if (rows.length > 0) {
       res.json(rows[0]);
     } else {
