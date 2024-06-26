@@ -6,7 +6,7 @@ const pool = mysql.createPool({
   password: 'linux',
   database: 'habit_tracker'*/
 
- host: '54.210.84.99',
+ host: '52.207.247.250',
   port: 3306,
   user: 'gabo',
   password: 'pato123',
