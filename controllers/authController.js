@@ -3,7 +3,6 @@ const bcrypt = require('bcrypt');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-const speakeasy = require('speakeasy');
 
 // Configurar nodemailer
 const transporter = nodemailer.createTransport({
@@ -132,7 +131,7 @@ exports.sendVerificationCode = async (req, res) => {
   }
 };
 
-exports.verifyCode = async (req, res) => {
+exports.verifyAccount = async (req, res) => {
   const { email, code } = req.body;
 
   try {
@@ -143,9 +142,34 @@ exports.verifyCode = async (req, res) => {
       return res.status(400).json({ message: 'Invalid verification code' });
     }
 
-    await db.execute('UPDATE users SET verificationCode = NULL WHERE email = ?', [email]);
+    await db.execute('UPDATE users SET isActive = ?, verificationCode = NULL WHERE id = ?', [true, user.id]);
+
+    res.json({ message: 'Account verified successfully' });
+  } catch (error) {
+    console.error('Error verifying account:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
+exports.verifyCode = async (req, res) => {
+  const { email, code } = req.body;
+
+  try {
+    console.log('Verifying code:', { email, code }); // Debugging
+
+    const [rows] = await db.execute('SELECT * FROM users WHERE email = ? AND verificationCode = ?', [email, code]);
+    const user = rows[0];
+
+    if (!user) {
+      console.log('Invalid verification code for email:', email); // Debugging
+      return res.status(400).json({ message: 'Invalid verification code' });
+    }
+
+    await db.execute('UPDATE users SET verificationCode = NULL WHERE id = ?', [user.id]);
 
     const token = jwt.sign({ userId: user.id, role: user.role }, 'secret_key', { expiresIn: '1h' });
+
+    console.log('User verified, generating token:', { token, role: user.role, userId: user.id }); // Debugging
 
     res.json({ token, role: user.role, userId: user.id });
   } catch (error) {
@@ -153,7 +177,6 @@ exports.verifyCode = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
-
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -163,10 +186,6 @@ exports.login = async (req, res) => {
 
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Account not activated. Please check your email for the verification code.' });
     }
 
     const passwordMatch = await bcrypt.compare(password, user.password);
